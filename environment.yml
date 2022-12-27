@@ -1,13 +1,10 @@
 name: yiddish
-channels:
-  - bioconda
-  - pytorch
-  - conda-forge
-  - anaconda
-  - defaults
 dependencies:
   - python>=3.10
   - pip
   - ipykernel
-  - nltk
   - beautifulsoup4
+  - selenium
+  - numpy
+  - pip:
+      - git+https://github.com/billbrod/WiktionaryParser.git
