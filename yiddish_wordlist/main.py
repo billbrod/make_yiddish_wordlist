@@ -31,8 +31,33 @@ def wiktionary_definition(wordlist):
     parser.include_relation('derived terms')
     parser.include_relation('alternative forms')
     parser.include_relation('see also')
-    for word in wordlist.keys():
-        wordlist[word]['wiktionary'] = parser.fetch(word)
+    for word, defs in wordlist.items():
+        wikt = parser.fetch(word)
+        for wi in wikt:
+            wi['transliteration'] = []
+            # remove the audio, which is never there anyway
+            wi['pronunciations'] = wi['pronunciations']['text']
+            for defi in wi['definitions']:
+                txt = defi.pop('text')
+                defi['text'] = txt[1:]
+                txt = txt[0]
+                defi['lexeme'] = txt.split('•')[0].strip()
+                wi['transliteration'].append(txt.split('•')[1].split(')')[0].replace('(', '').strip())
+                if u'\xa0' in txt:
+                    defi['gender'] = txt.split(u'\xa0')[1].split(',')[0]
+                else:
+                    defi['gender'] = None
+                if 'plural' in txt:
+                    defi['plural'] = txt.split('plural')[1].strip()
+                else:
+                    defi['plural'] = None
+                if 'participle' in txt:
+                    defi['participle'] = txt.split('participle')[1].replace('))', ')').strip()
+                else:
+                    defi['participle'] = None
+            if len(set(wi['transliteration'])) == 1:
+                wi['transliteration'] = wi['transliteration'][0]
+        wordlist[word]['wiktionary'] = wikt
     return wordlist
 
 
@@ -45,7 +70,7 @@ def _get_word_from_kentucky(browser, word):
     - can't assume it will be on the outside list
     - can't assume it will be the only word in the span
     - entry will be have the stem in the lexeme, if there are multiple, take all.
-    - if there isn't an entry where the stem is in the lexeme: take all goodmatches
+    - if there isn't an entry there the stem is in the lexeme: take all goodmatches
 
     Parameters
     ----------
