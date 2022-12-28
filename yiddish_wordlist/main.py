@@ -34,6 +34,7 @@ def wiktionary_definition(wordlist):
     parser.include_relation('alternative forms')
     parser.include_relation('see also')
     for word, defs in wordlist.items():
+        print(f'Looking up {word} from Wiktionary')
         wikt = parser.fetch(word)
         for wi in wikt:
             wi['transliteration'] = []
@@ -87,6 +88,7 @@ def _get_word_from_kentucky(browser, word):
         Dictionary containing all info scraped from the dictionary.
 
     """
+    print(f'Looking up {word} from the Kentucky dictionary')
     browser.find_element('name', 'base').send_keys(word + Keys.RETURN)
     soup = BeautifulSoup(browser.page_source, 'html.parser')
     # Get transliteration
