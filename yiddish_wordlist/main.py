@@ -260,7 +260,7 @@ if __name__ == '__main__':
     parser.add_argument("--dictionaries", '-d', nargs='+', default=['wiktionary', 'kentucky'],
                         choices=['wiktionary', 'kentucky'],
                         help="Which dictionaries to check for definitions.")
-    args = vars(parser.parse_args)
+    args = vars(parser.parse_args())
     output = args.pop('output_path')
     if output is None:
         output = op.splitext(args['input_path'])[0] + '.json'
