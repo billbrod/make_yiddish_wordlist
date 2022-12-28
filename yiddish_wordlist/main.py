@@ -2,8 +2,10 @@
 
 import string
 import re
-import os.path as op
+import json
+import argparse
 import numpy as np
+import os.path as op
 from wiktionaryparser import WiktionaryParser
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
@@ -217,19 +219,55 @@ def initialize_wordlist(text):
     # split text into words
     text = np.array([t for t in text.split(' ') if t])
     # get the indices for each word
-    return dict([(t, {'index': np.where(text==t)[0].tolist()})
-                 for t in set(text)])
+    wordlist = dict([(t, {'index': np.where(text==t)[0].tolist()})
+                     for t in set(text)])
+    for word in wordlist.values():
+        word['count (story)'] = len(word['index'])
+        word['frequency (story)'] = word['count (story)'] / len(text)
+    return wordlist
 
 
-def main(text):
+def main(text, dictionaries=['wiktionary', 'kentucky']):
+    """Convert Yiddish text to vocabulary list.
+
+    Parameters
+    ----------
+    text : str
+        Single string containing a complete Yiddish story.
+    dictionaries : list
+        Some subset of {'wiktionary', 'kentucky'}. The dictionaries to check.
+
+    Returns
+    -------
+    wordlist : dict
+        Vocabulary list, dictionary with Yiddish words as keys.
+
     """
-    """
-    if op.exists(text):
-        with open(text) as f:
-            text = f.read()
-    text = initialize_wordlist(text)
+    wordlist = initialize_wordlist(text)
+    if 'wiktionary' in dictionaries:
+        wordlist = wiktionary_definition(wordlist)
+    if 'kentucky' in dictionaries:
+        wordlist = kentucky_definition(wordlist)
+    return wordlist
 
 
 if __name__ == '__main__':
-    main()
-    pass
+    parser = argparse.ArgumentParser(description="Construct vocabulary list based on Yiddish text.")
+    parser.add_argument('input_path', help="Path to the story to read in. Should be a .txt or other plaintext file.")
+    parser.add_argument('--output_path', '-o', default=None,
+                        help=("Path to save the vocabulary list at. Should be a json. If unset, "
+                              "we save a json with the same name as the input."))
+    parser.add_argument("--dictionaries", '-d', nargs='+', default=['wiktionary', 'kentucky'],
+                        choices=['wiktionary', 'kentucky'],
+                        help="Which dictionaries to check for definitions.")
+    args = vars(parser.parse_args)
+    output = args.pop('output_path')
+    if output is None:
+        output = op.splitext(args['input_path'])[0] + '.json'
+    elif not output.endswith('json'):
+        raise ValueError("output_path must end in .json!")
+    with open(args['input_path']) as f:
+        text = f.read()
+    wordlist = main(text, args['dictionaries'])
+    with open(output, 'w') as f:
+        json.dump(wordlist, f)
