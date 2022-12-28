@@ -95,14 +95,19 @@ def _get_word_from_kentucky(browser, word):
     transl = soup.find('span', 'grammar')
     assert soup.find(string='Converting ') == transl.previous_sibling.previous_sibling.previous_sibling, "Can't find transliteration!"
     stem = soup.find('span', 'goodmatch')
-    assert soup.find(string='\nThe base word for ') == stem.previous_sibling.previous_sibling.previous_sibling, "Can't find transliteration!"
+    try:
+        assert soup.find(string='\nThe base word for ') == stem.previous_sibling.previous_sibling.previous_sibling, "Can't find transliteration!"
+    except AttributeError:
+        return []
     ky = {'transliteration': transl.text, 'stem': stem.text}
+    # sometimes the stem is multiple words for some reason
+    stem = stem.text.split(' ')[0]
     # azoy words[11] has many examples, which I'd like -- they're all in the
     # lexeme but don't start the entry. amol words[5] is not in the lexeme at
     # all, want to not grab the entry in goodmatches so we go to the else
     # statement
     goodmatches = [gm for gm in soup.find('ul').find_all('span', 'goodmatch')
-                   if stem.text in gm.parent.text]
+                   if stem in gm.parent.text]
     goodmatches = [gm for gm in goodmatches if 'class' in gm.parent.attrs and
                    'lexeme' in gm.parent.attrs['class']]
     if len(goodmatches) == 0:
@@ -112,14 +117,18 @@ def _get_word_from_kentucky(browser, word):
         entries = [gm.parent.parent for gm in goodmatches]
         lexs = [entr.find('span', 'lexeme').text.replace('(', '').strip()
                 for entr in entries]
-        entries = [entr for entr, lex in zip(entries, lexs) if stem.text in lex]
+        entries = [entr for entr, lex in zip(entries, lexs) if stem in lex]
     lexemes = []
     parts_of_speech = []
     plurals = []
     participles = []
     genders = []
+    definitions = []
     for entr in entries:
-        lex = entr.find('span', 'lexeme').text.replace('(', '').strip()
+        try:
+            lex = entr.find('span', 'lexeme').text.replace('(', '').strip()
+        except AttributeError:
+            continue
         lexemes.append(lex)
         try:
             pos = entr.find('span', 'grammar').text.split(',')[0]
@@ -149,7 +158,10 @@ def _get_word_from_kentucky(browser, word):
             genders.append(gdr.text.replace(',', '').replace('gender', '').strip())
         else:
             genders.append(None)
-    definitions = [entr.find('span', 'definition').text for entr in entries]
+        try:
+            definitions.append(entr.find('span', 'definition').text)
+        except AttributeError:
+            definitions.append(None)
     # we sometimes get duplicates for some reason, so we do this to make sure
     # each entry is unique
     definitions = set([(pos, defi, gdr, part, pl, lex) for pos, defi, gdr, part, pl, lex
