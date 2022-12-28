@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import string
+import re
 import os.path as op
 import numpy as np
 from wiktionaryparser import WiktionaryParser
@@ -41,12 +42,10 @@ def _get_word_from_kentucky(browser, word):
     when finding a match:
     - it will be a span/goodmatch
     - can't assume it will be the first / last / anything
-    - can't assume it will be on the outside list (`text[1]`)
-    - can't assume it will be the only word in the span (`text[1]`)
-    - entry will be the outermost one where stem is the first word in the lexeme? if there are multiple, take all?
-    - if there isn't an entry where the stem is the first word in the lexeme (`text[11]`):
-      - take matches where it's in the lexeme
-      - take all goodmatches
+    - can't assume it will be on the outside list
+    - can't assume it will be the only word in the span
+    - entry will be have the stem in the lexeme, if there are multiple, take all.
+    - if there isn't an entry where the stem is in the lexeme: take all goodmatches
 
     Parameters
     ----------
@@ -63,6 +62,73 @@ def _get_word_from_kentucky(browser, word):
     """
     browser.find_element('name', 'base').send_keys(word + Keys.RETURN)
     soup = BeautifulSoup(browser.page_source, 'html.parser')
+    # Get transliteration
+    transl = soup.find('span', 'grammar')
+    assert soup.find(string='Converting ') == transl.previous_sibling.previous_sibling.previous_sibling, "Can't find transliteration!"
+    stem = soup.find('span', 'goodmatch')
+    assert soup.find(string='\nThe base word for ') == stem.previous_sibling.previous_sibling.previous_sibling, "Can't find transliteration!"
+    ky = {'transliteration': transl.text, 'stem': stem.text}
+    # azoy words[11] has many examples, which I'd like -- they're all in the
+    # lexeme but don't start the entry. amol words[5] is not in the lexeme at
+    # all, want to not grab the entry in goodmatches so we go to the else
+    # statement
+    goodmatches = [gm for gm in soup.find('ul').find_all('span', 'goodmatch')
+                   if stem.text in gm.parent.text]
+    goodmatches = [gm for gm in goodmatches if 'class' in gm.parent.attrs and
+                   'lexeme' in gm.parent.attrs['class']]
+    if len(goodmatches) == 0:
+        entries = [gm.parent for gm in
+                   soup.find('ul').find_all('span', 'goodmatch')]
+    else:
+        entries = [gm.parent.parent for gm in goodmatches]
+        lexs = [entr.find('span', 'lexeme').text.replace('(', '').strip()
+                for entr in entries]
+        entries = [entr for entr, lex in zip(entries, lexs) if stem.text in lex]
+    lexemes = []
+    parts_of_speech = []
+    plurals = []
+    participles = []
+    genders = []
+    for entr in entries:
+        lex = entr.find('span', 'lexeme').text.replace('(', '').strip()
+        lexemes.append(lex)
+        try:
+            pos = entr.find('span', 'grammar').text.split(',')[0]
+            if not pos.startswith('plural') and not pos.startswith('gender'):
+                parts_of_speech.append(pos.strip())
+            else:
+                parts_of_speech.append(None)
+        except AttributeError:
+            parts_of_speech.append(None)
+        try:
+            plural = entr.find('span', 'grammar')
+            if not plural.text.startswith('plural'):
+                plural.text.split(',')[1]
+            plural_text = plural.next_sibling.split(',')[0].replace('(','').strip()
+            if plural.next_sibling.next_sibling.attrs['class'] == ['hebrew']:
+                plural_text += f' ({plural.next_sibling.next_sibling.text})'
+            plurals.append(plural_text)
+        except (IndexError, AttributeError):
+            plurals.append(None)
+        part = entr.find('span', string='participle')
+        if part is not None:
+            participles.append(part.next_sibling.text.replace(',', '').strip())
+        else:
+            participles.append(None)
+        gdr = entr.find('span', 'grammar', string=re.compile(r'gender.*'))
+        if gdr is not None:
+            genders.append(gdr.text.replace(',', '').replace('gender', '').strip())
+        else:
+            genders.append(None)
+    definitions = [entr.find('span', 'definition').text for entr in entries]
+    # we sometimes get duplicates for some reason, so we do this to make sure
+    # each entry is unique
+    definitions = set([(pos, defi, gdr, part, pl, lex) for pos, defi, gdr, part, pl, lex
+                       in zip(parts_of_speech, definitions, genders,
+                              participles, plurals, lexemes)])
+    ky['definitions'] = [dict(zip(['partOfSpeech', 'text', 'gender', 'participle',
+                                   'plural', 'lexeme'], word)) for word in definitions]
+    return ky
 
 
 def kentucky_definition(wordlist):
@@ -89,6 +155,9 @@ def kentucky_definition(wordlist):
     dictionary_url = 'https://www.cs.uky.edu/~raphael/yiddish/dictionary.cgi'
     browser = webdriver.Chrome()
     browser.get(dictionary_url)
+    for word in wordlist.keys():
+        wordlist[word]['kentucky'] = _get_word_from_kentucky(browser, word)
+    return wordlist
 
 
 def initialize_wordlist(text):
