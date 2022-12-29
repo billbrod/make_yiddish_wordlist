@@ -284,4 +284,4 @@ if __name__ == '__main__':
         text = f.read()
     wordlist = main(text, args['dictionaries'])
     with open(output, 'w') as f:
-        json.dump(wordlist, f)
+        json.dump(wordlist, f, ensure_ascii=False)
